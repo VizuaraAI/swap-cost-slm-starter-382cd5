@@ -1,0 +1,66 @@
+# Default SwapBench configuration.
+# Everything the harness needs for one experiment lives here, so a run is
+# reproducible from this file plus a git commit.
+
+experiment:
+  name: baseline
+  device_label: "laptop-nvme"   # free-form, goes into every result row
+  seed: 0
+  out_dir: "results"
+
+# Hard memory ceiling in gigabytes. The harness only *records* this value;
+# it is enforced outside the process by scripts/run_in_cgroup.sh.
+memory:
+  ceiling_gb: 2.0
+  drop_page_cache: false        # true needs root; see scripts/run_in_cgroup.sh
+  rss_sample_hz: 50
+
+# Model registry. Paths are relative to models_dir.
+# Fetch these with scripts/download_models.sh before the first run.
+models_dir: "models"
+
+models:
+  generalist:
+    repo_id: "microsoft/Phi-3-mini-4k-instruct-gguf"
+    filename: "Phi-3-mini-4k-instruct-q4.gguf"
+    label: "phi-3-mini-3.8b-q4"
+  specialist_code:
+    repo_id: "bartowski/Llama-3.2-1B-Instruct-GGUF"
+    filename: "Llama-3.2-1B-Instruct-Q4_K_M.gguf"
+    label: "llama-3.2-1b-q4-code"
+  specialist_math:
+    repo_id: "Qwen/Qwen2.5-1.5B-Instruct-GGUF"
+    filename: "qwen2.5-1.5b-instruct-q4_k_m.gguf"
+    label: "qwen2.5-1.5b-q4-math"
+
+# llama.cpp runtime settings, kept identical across arms so the comparison is fair.
+runtime:
+  n_ctx: 2048
+  n_threads: 4
+  n_gpu_layers: 0               # raise on Orin / CUDA laptop
+  use_mmap: true
+  use_mlock: false
+  max_tokens: 256
+  temperature: 0.0
+
+# Workload: task-labelled request stream with a controlled switch rate.
+workload:
+  tasks: ["code", "math"]
+  n_queries: 120
+  switch_rates: [0.0, 0.2, 0.4, 0.6, 0.8, 1.0]
+  # "bernoulli" is the default workload: independent switches, exactly the
+  # target marginal rate. "geometric" has the same marginal rate but clustered
+  # switches, and is the task-locality ablation, not the default.
+  burstiness: "bernoulli"
+  router: "oracle"              # "oracle" or "keyword"
+
+# Which arms to run. A = resident generalist, B = swapped specialists,
+# C = shared base plus adapters (needs adapter files), D = mmap partial residency.
+arms: ["A", "B"]
+
+data:
+  code_dataset: "google-research-datasets/mbpp"
+  code_split: "test"
+  math_dataset: "openai/gsm8k"
+  math_split: "test"
+  n_per_task: 60
